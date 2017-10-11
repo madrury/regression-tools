@@ -3,13 +3,14 @@ from math import ceil
 import pandas as pd
 import numpy as np
 from scipy.stats import mode
+from sklearn.base import clone
 from sklearn.utils import resample
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 import matplotlib.pyplot as plt
 
-from basis_expansions import NaturalCubicSpline
+from basis_expansions.basis_expansions import NaturalCubicSpline
 
 
 def plot_univariate_smooth(ax, x, y,
@@ -66,46 +67,48 @@ def plot_univariate_smooth(ax, x, y,
     x, y = x.reshape(-1, 1), y.reshape(-1, 1)
 
     if is_binary_array(y):
-        regression_class = LogisticRegression
+        regression_obj = LogisticRegression(
+            fit_intercept=True, C=1000, intercept_scaling=1000)
     else:
-        regression_class = LinearRegression
+        regression_obj = LinearRegression(fit_intercept=True)
     
     ax.scatter(x, y, color='grey', alpha=0.25, label="Data")
     if smooth and bootstrap:
         for _ in range(bootstrap):
             x_boot, y_boot = resample(x, y)
             plot_smoother(ax, x_boot, y_boot, x_lim, n_knots, 
-                          regression_class=regression_class,
+                          regression_obj=regression_obj,
                           alpha=0.5, color="lightblue", label=None)        
     if smooth:
         plot_smoother(ax, x, y, x_lim, n_knots, 
-                      regression_class=regression_class,
+                      regression_obj=regression_obj,
                       linewidth=3, color="blue", label="Trend")
 
 def is_binary_array(y):
     return set(np.unique(y)) == {0.0, 1.0}
 
-def plot_smoother(ax, x, y, x_lim, n_knots, regression_class=LinearRegression,
+def plot_smoother(ax, x, y, x_lim, n_knots, regression_obj=LinearRegression,
                   **kwargs):
     """Fit an plot a single cubic spline smoother on a scatterplot."""
     ncr = make_natural_cubic_regression(n_knots, 
-                                        regression_class=regression_class)
+                                        regression_obj=regression_obj)
     ncr.fit(x, y)
     t = np.linspace(x_lim[0], x_lim[1], num=250)
-    if hasattr(regression_class, "predict_proba"):
-        y_smoothed = ncr.predict_proba(t)[:, 1]
+    if hasattr(regression_obj, "predict_proba"):
+        y_smoothed = ncr.predict_proba(t.reshape(-1, 1))[:, 1]
     else:
         y_smoothed = ncr.predict(t.reshape(-1, 1))
     ax.plot(t, y_smoothed, **kwargs)
 
-def make_natural_cubic_regression(n_knots, regression_class=LinearRegression, 
+def make_natural_cubic_regression(n_knots, regression_obj=LinearRegression, 
                                   knot_range=(-2, 2)):
     """A helper function for constructing a pipeline fiting a one dimensional
     regression with a cubic spline feature."""
+    regression_obj = clone(regression_obj)
     return Pipeline([
         ('standardizer', StandardScaler()),
         ('nat_cubic', NaturalCubicSpline(knot_range[0], knot_range[1], n_knots=n_knots)),
-        ('regression', regression_class(fit_intercept=True))
+        ('regression', regression_obj)
     ])
 
 
