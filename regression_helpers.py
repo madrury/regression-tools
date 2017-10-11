@@ -69,10 +69,12 @@ def plot_univariate_smooth(ax, x, y,
     if is_binary_array(y):
         regression_obj = LogisticRegression(
             fit_intercept=True, C=1000, intercept_scaling=1000)
+        y_scatter = add_jitter(y)
     else:
         regression_obj = LinearRegression(fit_intercept=True)
+        y_scatter = y
     
-    ax.scatter(x, y, color='grey', alpha=0.25, label="Data")
+    ax.scatter(x, y_scatter, color='grey', alpha=0.25, label="Data")
     if smooth and bootstrap:
         for _ in range(bootstrap):
             x_boot, y_boot = resample(x, y)
@@ -86,6 +88,11 @@ def plot_univariate_smooth(ax, x, y,
 
 def is_binary_array(y):
     return set(np.unique(y)) == {0.0, 1.0}
+
+def add_jitter(y):
+    noise = np.random.uniform(0.0, 0.2, size=len(y)).reshape(-1, 1)
+    jitter = (y == 0.0)*noise + (-1)*(y == 1.0)*noise
+    return y + jitter.reshape(-1, 1)
 
 def plot_smoother(ax, x, y, x_lim, n_knots, regression_obj=LinearRegression,
                   **kwargs):
