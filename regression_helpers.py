@@ -86,14 +86,6 @@ def plot_univariate_smooth(ax, x, y,
                       regression_obj=regression_obj,
                       linewidth=3, color="blue", label="Trend")
 
-def is_binary_array(y):
-    return set(np.unique(y)) == {0.0, 1.0}
-
-def add_jitter(y):
-    noise = np.random.uniform(0.0, 0.2, size=len(y)).reshape(-1, 1)
-    jitter = (y == 0.0)*noise + (-1)*(y == 1.0)*noise
-    return y + jitter.reshape(-1, 1)
-
 def plot_smoother(ax, x, y, x_lim, n_knots, regression_obj=LinearRegression,
                   **kwargs):
     """Fit an plot a single cubic spline smoother on a scatterplot."""
@@ -118,21 +110,146 @@ def make_natural_cubic_regression(n_knots, regression_obj=LinearRegression,
         ('regression', regression_obj)
     ])
 
+def is_binary_array(y):
+    return set(np.unique(y)) == {0.0, 1.0}
 
-def display_coef(model, coef_names):
-    """Pretty print a table of the parameter estimates in a linear model.
+def add_jitter(y):
+    noise = np.random.uniform(0.0, 0.2, size=len(y)).reshape(-1, 1)
+    jitter = (y == 0.0)*noise + (-1)*(y == 1.0)*noise
+    return y + jitter.reshape(-1, 1)
+
+
+def predicteds_vs_actuals(ax, x, y, y_hat, n_bins=50):
+    """Plot the mean predicteds vs. mean actuals (as in, actual target
+    varaible) against a predictor varaible.  The means are calculated by
+    bucketing, the against varaible's range is partitioned into a umber of
+    bins, and the means of the predicted and actual arrays are calculated
+    within each bin.
 
     Parameters
     ----------
-    model: A fit sklean object with a `coef_` attribute.
+    ax: matplotlib.Axis 
+        An axis object to draw the plot on.
 
-    coef_names: A list of names associated with the coefficients.
+    x: np.array or pd.Series, shape (n_samples,)
+        An np.array or pd.Series object containing the x data.  This is the
+        varaible that will be binned and the means will be plotted against.
+
+    y: np.array or pd.Series, shape (n_samples,)
+        An np.array or pd.Series object containing the actual y (target) data.
+
+    y_hat: np.array or pd.Series, shape (n_samples,)
+        An np.array or pd.Series object containing the predicted y data.
+
+    n_bins: int
+        The number of bins to bucket the x variable into.
     """
-    print("{:<35}{:<20}".format("Name", "Parameter Estimate"))
-    print("-"*(35 + 20))
-    for coef, name in zip(model.coef_, coef_names):
-        row = "{:<35}{:<20}".format(name, coef)
-        print(row)
+    bins, endpoints = pd.cut(x, bins=n_bins, retbins=True)
+    centers = (endpoints[:-1] + endpoints[1:]) / 2
+    y_hat_means = pd.DataFrame({'y_hat': y_hat, 'bins': bins}).groupby("bins").mean()["y_hat"]
+    ax.scatter(x, y, color="grey", alpha=0.5, label="Data")
+    ax.scatter(centers, y_hat_means, s=50, label=None)
+    ax.plot(centers, y_hat_means, label="Mean Predicted")
+    ax.legend()
+
+
+def plot_partial_depenence(ax, model, X, var_name,
+                           y=None, pipeline=None, n_points=250, **kwargs):
+    """Create a partial dependence plot of a feature in a model.
+
+    A partial dependence plot fixes all but one of the features in a model to a
+    constant value (the mean for a continuous feature and the mode for a
+    catagorical) and then calculates the predicted values from the model as the
+    remaining feature is varied through a range.
+
+    Since a feature may enter a regression through more than one column (i.e.
+    when using a basis expansion like polynomials or splines) this function has
+    the ability to consume a pipleline object, which will be used to transform
+    the data after setting features to the means or modes in the raw data.
+
+    Parameters
+    ----------
+    ax: matplotlib.Axis 
+        An axis object to draw the plot on.
+
+    model: 
+        A trained sklearn model.  Must implement a `predict` or `predict_proba`
+        method.
+
+    X: pd.DataFrame 
+        The raw data to use in making predictions when drawing the partial
+        dependence plot. Must be a pandas DataFrame.
+
+    var_name: str
+        The name of the varaible to make the partial dependence plot of.
+
+    y: np.array or pd.Series
+        The y values, only needed if a scatter plot of x vs. y is desired.
+
+    pipeline: sklearn.Pipeline
+        A sklearn Pipeline object implementing the transformations of the raw
+        features used in the model.
+
+    n_points: int
+        The number of points to use in the grid when drawing the plot.
+    """
+    Xpd = make_partial_dependence_data(X, var_name, n_points)
+    x_plot = Xpd[var_name]
+    if pipeline is not None:
+        Xpd = pipeline.transform(Xpd)
+    if y is not None:
+        ax.scatter(X[var_name], y, color="grey", alpha=0.5)
+    if hasattr(model, "predict_proba"):
+        y_hat = model.predict_proba(Xpd)[:, 1]
+    else:
+        y_hat = model.predict(Xpd)
+    ax.plot(x_plot, y_hat, **kwargs)
+
+def plot_partial_dependences(model, X, var_names, 
+                             y=None, bootstrap_models=None, pipeline=None,
+                             n_points=250):
+    """Convenience function for creating many partial dependency plots."""
+    fig, axs = plt.subplots(len(var_names), figsize=(12, 3*len(var_names)))
+    for ax, name in zip(axs, var_names):
+        if bootstrap_models:
+            for M in bootstrap_models[:100]:
+                plot_partial_depenence(
+                    ax, M, X=X, var_name=name, pipeline=pipeline, alpha=0.8, 
+                    linewidth=1, color="lightblue")
+        plot_partial_depenence(ax, model, X=X, var_name=name, y=y,
+                               pipeline=pipeline, color="blue", linewidth=3)
+        ax.set_title("{} Partial Dependence".format(name))
+    return fig, axs
+
+def make_partial_dependence_data(X, var_name, n_points=250):
+    """Create a data frame underlying a partial dependence plot."""
+    Xpd = np.empty((n_points, X.shape[1]))
+    Xpd = pd.DataFrame(Xpd, columns=X.columns)
+    all_other_var_names = set(X.columns) - {var_name}
+    for name in all_other_var_names:
+        if is_numeric_array(X[name]):
+            Xpd[name] = X[name].mean()
+        else:
+            # Array is of object type, fill in the mode.
+            array_mode = mode(X[name])[0][0]
+            Xpd[name] = array_mode
+    min, max = np.min(X[var_name]), np.max(X[var_name])
+    Xpd[var_name] = np.linspace(min, max, num=n_points)
+    return Xpd
+
+def is_numeric_array(arr):
+    """Check if a numpy array contains numeric data.
+
+    Source:
+        https://codereview.stackexchange.com/questions/128032
+    """
+    numerical_dtype_kinds = {'b', # boolean
+                             'u', # unsigned integer
+                             'i', # signed integer
+                             'f', # floats
+                             'c'} # complex
+    return arr.dtype.kind in numerical_dtype_kinds
+
 
 
 def bootstrap_train(model, X, y, bootstraps=1000, **kwargs):
@@ -188,86 +305,18 @@ def plot_bootstrap_coefs(models, coef_names, n_col=4):
     return fig, axs
 
 
-def plot_partial_depenence(ax, model, X, var_name,
-                           y=None, pipeline=None, n_points=250, **kwargs):
-    """Create a partial dependence plot of a feature in a model.
+
+def display_coef(model, coef_names):
+    """Pretty print a table of the parameter estimates in a linear model.
 
     Parameters
     ----------
-    ax: A matplotlib axis object to draw the partial dependence plot on.
+    model: A fit sklean object with a `coef_` attribute.
 
-    model: A trained sklearn model.  Must implement a `predict` method.
-
-    X: The raw data to use in making predictions when drawing the partial
-    dependence plot. Must be a pandas DataFrame.
-
-    var_name: A string, the name of the varaible to make the partial dependence
-    plot of.
-
-    y: The y values, only needed if a scatter plot of x vs. y is desired.
-
-    pipeline: A sklearn Pipeline object containing the transformations of the
-    raw features used in the model.
-
-    n_points: The number of points to use in the grid when drawing the plot.
+    coef_names: A list of names associated with the coefficients.
     """
-    Xpd = make_partial_dependence_data(X, var_name, n_points)
-    x_plot = Xpd[var_name]
-    if pipeline is not None:
-        Xpd = pipeline.transform(Xpd)
-    if y is not None:
-        ax.scatter(X[var_name], y, color="grey", alpha=0.5)
-    y_hat = model.predict(Xpd)
-    ax.plot(x_plot, y_hat, **kwargs)
-
-def plot_partial_dependences(model, X, var_names, 
-                            y=None, bootstrap_models=None, pipeline=None, n_points=250):
-    fig, axs = plt.subplots(len(var_names), figsize=(12, 3*len(var_names)))
-    for ax, name in zip(axs, var_names):
-        if bootstrap_models:
-            for M in bootstrap_models[:100]:
-                plot_partial_depenence(
-                    ax, M, X=X, var_name=name, pipeline=pipeline, alpha=0.8, 
-                    linewidth=1, color="lightblue")
-        plot_partial_depenence(ax, model, X=X, var_name=name, y=y,
-                               pipeline=pipeline, color="blue", linewidth=3)
-        ax.set_title("{} Partial Dependence".format(name))
-    return fig, axs
-
-def make_partial_dependence_data(X, var_name, n_points=250):
-    Xpd = np.empty((n_points, X.shape[1]))
-    Xpd = pd.DataFrame(Xpd, columns=X.columns)
-    all_other_var_names = set(X.columns) - {var_name}
-    for name in all_other_var_names:
-        if is_numeric_array(X[name]):
-            Xpd[name] = X[name].mean()
-        else:
-            # Array is of object type, fill in the mode.
-            array_mode = mode(X[name])[0][0]
-            Xpd[name] = mode
-    min, max = np.min(X[var_name]), np.max(X[var_name])
-    Xpd[var_name] = np.linspace(min, max, num=n_points)
-    return Xpd
-
-def is_numeric_array(arr):
-    """Check if a numpy array contains numeric data.
-
-    Source:
-        https://codereview.stackexchange.com/questions/128032
-    """
-    numerical_dtype_kinds = {'b', # boolean
-                             'u', # unsigned integer
-                             'i', # signed integer
-                             'f', # floats
-                             'c'} # complex
-    return arr.dtype.kind in numerical_dtype_kinds
-
-
-def predicteds_vs_actuals(ax, x, y, y_hat, n_bins=50):
-    bins, endpoints = pd.cut(x, bins=n_bins, retbins=True)
-    centers = (endpoints[:-1] + endpoints[1:]) / 2
-    y_hat_means = pd.DataFrame({'y_hat': y_hat, 'bins': bins}).groupby("bins").mean()["y_hat"]
-    ax.scatter(x, y, color="grey", alpha=0.5, label="Data")
-    ax.scatter(centers, y_hat_means, s=50, label=None)
-    ax.plot(centers, y_hat_means, label="Mean Predicted")
-    ax.legend()
+    print("{:<35}{:<20}".format("Name", "Parameter Estimate"))
+    print("-"*(35 + 20))
+    for coef, name in zip(model.coef_, coef_names):
+        row = "{:<35}{:<20}".format(name, coef)
+        print(row)
