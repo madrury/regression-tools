@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler as SS
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
@@ -83,6 +84,30 @@ class MapFeature(TransformerMixin):
             return pd.Series(Xind, index=X.index, name=self.name)
         return Xind
 
+class StandardScaler(TransformerMixin):
+    """Standardize all the columns in a np.array or a pd.DataFrame.
+
+    Parameters:
+        None
+    """
+    def __init__(self):
+        self._scaler = SS()
+
+    def fit(self, X, *args, **kwargs):
+        if isinstance(X, pd.DataFrame) or isinstance(X, pd.Series):
+            self._scaler.fit(X.values)
+        else:
+            self._scaler.fit(X)
+        return self
+
+    def transform(self, X, *args, **kwargs):
+        if isinstance(X, pd.DataFrame) or isinstance(X, pd.Series):
+            return pd.DataFrame(
+                self._scaler.transform(X.values),
+                columns=X.columns,
+                index=X.index)
+        else:
+            return self._scaler.transform(X)
 
 class Intercept(TransformerMixin):
     """Create an intercept array or series (containing all values 1.0) of the
