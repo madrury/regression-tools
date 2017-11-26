@@ -47,6 +47,7 @@ class FeatureUnion(TransformerMixin):
     def fit(self, X, y=None):
         for _, t in self.transformer_list:
             t.fit(X, y)
+        return self
 
     def transform(self, X, *args, **kwargs):
         Xs = [t.transform(X) for _, t in self.transformer_list]
