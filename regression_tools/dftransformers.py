@@ -35,9 +35,9 @@ class Identity(TransformerMixin):
 
 
 class FeatureUnion(TransformerMixin):
-    """Just like sklean.FeatureUnion, but also works for pandas.DataFrame
+    """Just like sklearn.FeatureUnion, but also works for pandas.DataFrame
     objects.
-    
+
     Parameters
     ----------
     transformer_list: list of Transformer objects.
