@@ -94,17 +94,25 @@ class StandardScaler(TransformerMixin):
         self._scaler = SS()
 
     def fit(self, X, *args, **kwargs):
-        if isinstance(X, pd.DataFrame) or isinstance(X, pd.Series):
+        if isinstance(X, pd.DataFrame):
             self._scaler.fit(X.values)
+        elif isinstance(X, pd.Series):
+            self._scaler.fit(X.values.reshape(-1,1))
         else:
             self._scaler.fit(X)
         return self
 
     def transform(self, X, *args, **kwargs):
-        if isinstance(X, pd.DataFrame) or isinstance(X, pd.Series):
+        if isinstance(X, pd.DataFrame):
             return pd.DataFrame(
                 self._scaler.transform(X.values),
                 columns=X.columns,
+                index=X.index)
+        elif isinstance(X, pd.Series):
+            return pd.Series(
+                #StandardScaler requires 2-d data, pd.Series requires 1-d data
+                self._scaler.transform(X.values.reshape(-1,1)).reshape(-1),
+                name=X.name,
                 index=X.index)
         else:
             return self._scaler.transform(X)
