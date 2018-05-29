@@ -131,48 +131,56 @@ class Intercept(TransformerMixin):
         return np.ones(X.shape[0])
 
 class DummiesEncoder(TransformerMixin):
-    """Makes dummy variables for all categorical columns in a dataframe.
+    """Encodes dummy variables for all categorical columns in a dataframe.
+
+    The input to this transformer should be an array of strings, integers, or
+    floats that denote categorical (discrete) features. The output will match
+    the input type (i.e. pandas -> pandas, numpy -> numpy) where each column
+    corresponds to a single feature.
+
+    This encoding may be needed for many types of modeling.
+
+    Parameters:
+    idxs ("all" or array-like): column indicies to generate dummies
+        - array-like str column names for pd.DataFrame
+        - array-like int column indicies for np.array
+        - "all" (default) for all columns regardless of data object
+        - use "all" for pd.Series
+
+    levels (mapping): dict of col_index:list of str or int for levels to
+        dummify or None to encode all levels for all features
+        important: explicitly defining levels overrides num_dummies,
+        i.e. if you want explicitly set the levels with n-1 total levels,
+        make sure to do that with this option.
+
+    less (int > 0): for given n feature levels, n - less to encode.
+        Useful for models that require n-1 or fewer levels to avoid
+        linear algebra solver problems. Use None to encode all levels.
+
+    drop (bool): whether to drop columns that will be dummified.
+
+    Example: df = pd.DataFrame({"color":"blue", "orange", "red"},
+                                "flavor": "berry", "orange", "cherry"})
+             sd = SmartDummies(levels={"color":["red","blue],
+                                       "flavor":["cherry", "berry"]})
+             sd.fit(df)
+             sd.transform(df)
+             >>>"color_red"  "color_blue"  "flavor_cherry"  "flavor_berry"
+                 0            1             0                1
+                 0            0             0                0
+                 1            0             1                0
     """
     def __init__(self, idxs="all", levels=None, less=None, drop=True):
-        """Instatiates transformer
-        Parameters:
-        idxs ("all" or array-like): column indicies to generate dummies
-            array-like str column names for pd.DataFrame
-            array-like int column indicies for np.array
-            or "all" for all columns regardless of data object
-            use "all" for pd.Series
-
-        levels (mapping): dict of col_index:list of str or int for levels to
-            dummify or None to encode all levels for all features
-            Example: df = pd.DataFrame({"color":"blue", "orange", "red"},
-                                        "flavor": "berry", "orange", "cherry"})
-                     sd = SmartDummies(levels={"color":["red","blue],
-                                               "flavor":["cherry", "berry"]})
-                     sd.fit(df)
-                     sd.transform(df)
-                     >>>"color_red" "color_blue" "flavor_cherry" "flavor_berry"
-                         0           1             0              1
-                         0           0             0              0
-                         1           0             1              0
-            important: explicitly defining levels overrides num_dummies below,
-            i.e. if you want explicitly set the levels with n-1 total levels,
-            make sure to do that with this option.
-        less (int > 0): for given n feature levels, n - less to encode.
-            Useful for models that require n-1 or fewer levels to avoid
-            gradient descent problems. Use None for all levels.
-
-        drop (bool): whether to drop columns that will be dummified
-        """
         self.idxs = idxs
         self.levels = levels
         if less == None:
             self.less = None
         else:
-            self.less = -(less)
+            self.less = less
         self.drop = drop
+
     def fit(self, X):
-        """
-        """
+        """Fit DummiesEncoder to X"""
         # get all indices if not user-defined
         if self.idxs == "all":
             if isinstance(X, pd.DataFrame):
@@ -195,9 +203,9 @@ class DummiesEncoder(TransformerMixin):
                 else:
                     self.levels[index] = self._get_levels(X[:,index])
         return self
+
     def transform(self, X):
-        """
-        """
+        """Transform X using the dummies encoding"""
 
         # handle pd.DataFrame
         if isinstance(X, pd.DataFrame):
@@ -240,10 +248,10 @@ class DummiesEncoder(TransformerMixin):
         else:
             raise TypeError("Expected pd.DataFrame, pd.Series, or np.ndarray")
 
-
     def _get_levels(self, arr):
-        """Returns unique levels in array-like arr"""
-        return list(set(arr))[:self.less]
+        """Returns the most common unique levels in array-like arr"""
+        levels, counts = np.unique(arr, return_counts=True)
+        return levels[np.argsort(counts)[self.less:]]
 
     def _make_colnames(self, prefix, levels):
         """Returns list of str column names
@@ -252,7 +260,7 @@ class DummiesEncoder(TransformerMixin):
         levels (list of str): list of suffixes to append to individual columns
 
         Returns:
-        list of str in form prefix_level
+        list of str in form "prefix_level"
         """
         return [f"{prefix}_{level}" for level in levels]
 
@@ -267,6 +275,7 @@ class DummiesEncoder(TransformerMixin):
             else:
                 curr_vals = X[:,key].reshape(-1,1)
             # broadcast boolean check to fill array
-            (dum_arr[:,curr_col_idx:curr_col_idx + len(self.levels[key])]) += (np.array(self.levels[key]) == curr_vals)
+            dum_arr[:, curr_col_idx:curr_col_idx + len(self.levels[key])] \
+                += np.array(self.levels[key]) == curr_vals
             curr_col_idx += len(self.levels[key])
         return dum_arr
