@@ -279,3 +279,81 @@ class DummiesEncoder(TransformerMixin):
                 += np.array(self.levels[key]) == curr_vals
             curr_col_idx += len(self.levels[key])
         return dum_arr
+
+class MissingIndicator(TransformerMixin):
+    """Creates a new column and replaces nans with chosen value
+    Parameters:
+    fill (str): 'mean' replaces nans with mean of existing values
+
+    """
+    def __init__(self, fill="mean"):
+        self.fill = fill
+        self.values = None
+
+    def fit(self, X):
+        """Fit MissingIndicator to X"""
+        if isinstance(X, pd.Series):
+            self.values = self._find_fill(X)
+        else:
+            self.values = np.apply_along_axis(
+                lambda x: self._find_fill (x), 0, X)
+        return self
+
+    def transform(self, X):
+        """Transform X with fit MissingIndicator"""
+        missing_array = np.zeros(X.shape, dtype=np.int8)
+        missing_array += np.isnan(X)
+        num_array = self._replace_nans(X)
+        if isinstance(X, np.ndarray):
+            if len(X.shape) == 1:
+                missing_array = missing_array.reshape(-1,1)
+                num_array = num_array.reshape(-1,1)
+            return np.concatenate((num_array, missing_array), axis=1)
+        elif isinstance(X, pd.DataFrame):
+            colnames = list(X.columns)
+            colnames.extend([f"{col}_is_missing" for col in X.columns])
+        elif isinstance(X, pd.Series):
+            colnames = [X.name, str(X.name)+"is_missing"]
+            missing_array = missing_array.reshape(-1,1)
+            num_array = num_array.reshape(-1,1)
+        else:
+            raise TypeError("Expected pd.DataFrame, pd.Series, or np.ndarray")
+
+        return pd.DataFrame(np.concatenate((num_array, missing_array), axis=1),
+                            columns=colnames, index=X.index)
+
+    def _find_fill(self, arr):
+        """Returns the fill value for an array
+
+        Parameters:
+        arr (array-like): array of mixed numerical data mixed with nans
+
+        Returns:
+        int or float corresponding to fill method derived from data
+        """
+        if self.fill == "zero":
+            return 0
+        elif self.fill == "mean":
+            return np.nanmean(arr)
+        else:
+            return np.nanmedian(arr)
+
+    def _replace_nans(self, arr):
+        """Returns arr with nans replaced with corresponding values in
+        self.values
+
+        Parameters:
+        arr (array-like): array of mixed numerical data mixed with nans
+        """
+        arr = arr.copy()
+        idxs = np.where(np.isnan(arr))
+        # note: two-line if condition below. indentation is confusing.
+        if (isinstance(arr, pd.Series) or
+            (isinstance(arr, np.ndarray) and len(arr.shape) == 1)):
+            arr = np.asarray(arr)
+            arr[idxs] = self.values
+            return arr
+        elif isinstance(arr, pd.DataFrame):
+            arr = arr.values
+        arr[idxs] = np.take(self.values, idxs[1])
+        return arr
