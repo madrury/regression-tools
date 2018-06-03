@@ -464,6 +464,9 @@ class NanReplacer(TransformerMixin):
             return np.nanmin(arr)
         elif self.fill == 'median':
             return np.nanmedian(arr)
+        else:
+            raise ValueError("Use one of ['zero', 'mean', 'median', "
+                             "'max', 'min']) for fill")
 
     def _replace_nans(self, arr):
         """Returns arr with nans replaced with corresponding values in
