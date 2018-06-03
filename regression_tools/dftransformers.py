@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import warnings
 from sklearn.preprocessing import StandardScaler as SS
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -286,12 +287,58 @@ class MissingIndicator(TransformerMixin):
     fill (str): 'mean' replaces nans with mean of existing values
 
     """
+    def __init__(self):
+        self.missing_data_cols = None
+        self.missing_data_names = None
+    def fit(self, X):
+        """Fit MissingIndicator to X"""
+        arr = X.copy()
+        if isinstance(X, pd.DataFrame):
+            arr = arr.values
+        self.missing_data_cols = np.where(np.isnan(arr).any(axis=0))[0]
+        if isinstance(X, pd.DataFrame):
+            self.missing_data_names = X.columns[self.missing_data_cols]
+        if len(self.missing_data_cols) == 0:
+            warnings.warn("Warning: no missing data found. "
+                          "No transformations will be made.")
+        return self
+
+    def transform(self, X):
+        """Transform X with fit MissingIndicator"""
+        if len(self.missing_data_cols) == 0:
+            warnings.warn("Warning: no missing data was found during fitting. "
+                          "No transformations will be made. Returning X.")
+            return X
+
+        missing_array = np.zeros(X.shape, dtype=np.int8)
+        missing_array += np.isnan(X)
+        if len(X.shape) == 2:
+            missing_array = missing_array[:,self.missing_data_cols]
+        if isinstance(X, np.ndarray):
+            if len(X.shape) == 1:
+                missing_array = missing_array.reshape(-1,1)
+            return missing_array
+        elif isinstance(X, pd.DataFrame):
+            colnames = ([f"{col}_is_missing" for col in self.missing_data_names])
+            return pd.DataFrame(missing_array, columns=colnames, index=X.index)
+        elif isinstance(X, pd.Series):
+            if X.name:
+                series_name = str(X.name)+"is_missing"
+            else:
+                series_name = None
+            return pd.Series(missing_array, name=series_name, index=X.index)
+        else:
+            raise TypeError("Expected pd.DataFrame, pd.Series, or np.ndarray")
+
+class NanReplacer(TransformerMixin):
+    """Replaces nans with zeros or a statistic derived from the data"""
     def __init__(self, fill="mean"):
+        """instantiate NanReplacer object"""
         self.fill = fill
         self.values = None
 
     def fit(self, X):
-        """Fit MissingIndicator to X"""
+        """Fit NanReplacer to X"""
         if isinstance(X, pd.Series):
             self.values = self._find_fill(X)
         else:
@@ -300,27 +347,22 @@ class MissingIndicator(TransformerMixin):
         return self
 
     def transform(self, X):
-        """Transform X with fit MissingIndicator"""
-        missing_array = np.zeros(X.shape, dtype=np.int8)
-        missing_array += np.isnan(X)
+        """Transform X with fit NanReplacer"""
         num_array = self._replace_nans(X)
         if isinstance(X, np.ndarray):
             if len(X.shape) == 1:
-                missing_array = missing_array.reshape(-1,1)
                 num_array = num_array.reshape(-1,1)
-            return np.concatenate((num_array, missing_array), axis=1)
+            return num_array
         elif isinstance(X, pd.DataFrame):
             colnames = list(X.columns)
-            colnames.extend([f"{col}_is_missing" for col in X.columns])
+            return pd.DataFrame(num_array, columns=colnames, index=X.index)
         elif isinstance(X, pd.Series):
-            colnames = [X.name, str(X.name)+"is_missing"]
-            missing_array = missing_array.reshape(-1,1)
-            num_array = num_array.reshape(-1,1)
+            return pd.Series(num_array, name=X.name, index=X.index)
+
         else:
             raise TypeError("Expected pd.DataFrame, pd.Series, or np.ndarray")
 
-        return pd.DataFrame(np.concatenate((num_array, missing_array), axis=1),
-                            columns=colnames, index=X.index)
+
 
     def _find_fill(self, arr):
         """Returns the fill value for an array
@@ -335,6 +377,10 @@ class MissingIndicator(TransformerMixin):
             return 0
         elif self.fill == "mean":
             return np.nanmean(arr)
+        elif self.fill == "max":
+            return np.nanmax(arr)
+        elif self.fill == "min":
+            return np.nanmin(arr)
         else:
             return np.nanmedian(arr)
 
