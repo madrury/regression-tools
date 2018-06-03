@@ -131,6 +131,7 @@ class Intercept(TransformerMixin):
                              index=X.index, name="intercept")
         return np.ones(X.shape[0])
 
+
 class DummiesEncoder(TransformerMixin):
     """Encodes dummy variables for all categorical columns in a dataframe.
 
@@ -281,15 +282,51 @@ class DummiesEncoder(TransformerMixin):
             curr_col_idx += len(self.levels[key])
         return dum_arr
 
-class MissingIndicator(TransformerMixin):
-    """Creates a new column and replaces nans with chosen value
-    Parameters:
-    fill (str): 'mean' replaces nans with mean of existing values
 
+class MissingIndicator(TransformerMixin):
+    """Returns boolean arrays that indicate missing data.
+
+    The input to this transformer should be array-like objects of any data type
+    where missing values are indicated with np.nan. The `fit` method checks for
+    columns in the array that are missing data. The `transform` method checks
+    for missing data and returns boolean arrays indicating the whether data is
+    missing at a given index in the columns that were missing data when fit.
+
+    Attributes
+    ----------
+    self.missing_data_cols : np.ndarray
+        Column indices in X that contain missing data when `.fit(X)` is called
+    self.missing_data_names : np.ndarray
+        Column names in X that contain missing data when `.fit(X)` is called on
+        an instance of pd.DataFrame
+
+    Examples
+    --------
+    >>> df = pd.DataFrame({"a":[0,1,3,np.nan], "b":[9,np.nan, 3,1],
+                           "c":[3,5,2,4]})
+    >>> df2 = pd.DataFrame({"a":[3,np.nan, 4], "b":[np.nan, 3,1],
+                            "c":[np.nan, 1, 2]})
+    >>> mi = MissingIndicator()
+    >>> mi.fit(df)
+    <MissingIndicator at 0x1a0f08e240>
+    >>> mi.transform(df)
+      "a_is_missing"  "b_is_missing"
+    0 0               0
+    1 0               1
+    2 0               0
+    3 1               0
+
+    >>> mi.transform(df2)
+      "a_is_missing"  "b_is_missing"
+    0 0               1
+    1 1               0
+    2 0               0
     """
     def __init__(self):
+        """Instantiate MissingIndicator object"""
         self.missing_data_cols = None
         self.missing_data_names = None
+
     def fit(self, X):
         """Fit MissingIndicator to X"""
         arr = X.copy()
@@ -309,11 +346,12 @@ class MissingIndicator(TransformerMixin):
             warnings.warn("Warning: no missing data was found during fitting. "
                           "No transformations will be made. Returning X.")
             return X
-
         missing_array = np.zeros(X.shape, dtype=np.int8)
         missing_array += np.isnan(X)
+        # subset columns if necessary
         if len(X.shape) == 2:
             missing_array = missing_array[:,self.missing_data_cols]
+        # type checking of X and handling type-specific return requirements
         if isinstance(X, np.ndarray):
             if len(X.shape) == 1:
                 missing_array = missing_array.reshape(-1,1)
@@ -330,10 +368,55 @@ class MissingIndicator(TransformerMixin):
         else:
             raise TypeError("Expected pd.DataFrame, pd.Series, or np.ndarray")
 
+
 class NanReplacer(TransformerMixin):
-    """Replaces nans with zeros or a statistic derived from the data"""
+    """Replaces nans with zeros or a statistic derived from the data
+
+    The input to this transformer should be array-like objects of numeric data
+    types where missing data is indicated with np.nan. The `fit` method finds
+    the chosen statistic for each column and saves it. The `transform` method
+    replaces all np.nan in a column with the corresponding statistic found in
+    the fit method.
+
+    Parameters
+    ----------
+    fill : string
+        Value to use for filling missing data.
+        - 'mean' (default) : replace missing values with column mean
+        - 'zero' : replace missing values with 0
+        - 'median' : replace missing values with column median
+        - 'max' : replace missing values with column max
+        - 'min' : replace missing values with column min
+
+    Attributes
+    ----------
+    values : array of numeric or numeric
+        Values found during fitting to be used to replace missing data during
+        transform.
+
+    Examples
+    --------
+    >>> df = pd.DataFrame({"a":[0,1,3,np.nan], "b":[9,np.nan, 3,1],
+                           "c":[3,5,2,4]})
+    >>> df2 = pd.DataFrame({"a":[3,np.nan, 4], "b":[np.nan, 3,1],
+                            "c":[np.nan, 1, 2]})
+    >>> nr = NanReplacer()
+    >>> nr.fit(df)
+    <NanReplacer at 0x1a0f0953c8>
+    >>> nr.transform(df)
+      "a"         "b"         "c"
+    0 0.000000    9.000000    3.0
+    1 1.000000    4.333333    5.0
+    2 3.000000    3.000000    2.0
+    3 1.333333    1.000000    4.0
+    >>> nr.transform(df2)
+      "a"         "b"         "c"
+    0 3.000000    4.333333    3.5
+    1 1.333333    3.000000    1.0
+    2 4.000000    1.000000    2.0
+    """
     def __init__(self, fill="mean"):
-        """instantiate NanReplacer object"""
+        """Instantiate NanReplacer object"""
         self.fill = fill
         self.values = None
 
@@ -362,8 +445,6 @@ class NanReplacer(TransformerMixin):
         else:
             raise TypeError("Expected pd.DataFrame, pd.Series, or np.ndarray")
 
-
-
     def _find_fill(self, arr):
         """Returns the fill value for an array
 
@@ -371,7 +452,7 @@ class NanReplacer(TransformerMixin):
         arr (array-like): array of mixed numerical data mixed with nans
 
         Returns:
-        int or float corresponding to fill method derived from data
+        int or float corresponding to user-declared fill method
         """
         if self.fill == "zero":
             return 0
@@ -381,7 +462,7 @@ class NanReplacer(TransformerMixin):
             return np.nanmax(arr)
         elif self.fill == "min":
             return np.nanmin(arr)
-        else:
+        elif self.fill == 'median':
             return np.nanmedian(arr)
 
     def _replace_nans(self, arr):
@@ -390,6 +471,9 @@ class NanReplacer(TransformerMixin):
 
         Parameters:
         arr (array-like): array of mixed numerical data mixed with nans
+
+        Returns:
+        np.ndarray of numeric dtype
         """
         arr = arr.copy()
         idxs = np.where(np.isnan(arr))
