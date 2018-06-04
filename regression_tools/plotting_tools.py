@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression, LogisticRegression
 import matplotlib.pyplot as plt
 
-from basis_expansions.basis_expansions import NaturalCubicSpline
+from basis_expansions.basis_expansions import LinearSpline, NaturalCubicSpline
 
 
 def plot_univariate_smooth(ax, x, y,
@@ -89,8 +89,7 @@ def plot_univariate_smooth(ax, x, y,
 def plot_smoother(ax, x, y, x_lim, n_knots, regression_obj=LinearRegression,
                   **kwargs):
     """Fit an plot a single cubic spline smoother on a scatterplot."""
-    ncr = make_natural_cubic_regression(n_knots, 
-                                        regression_obj=regression_obj)
+    ncr = make_pl_regression(n_knots, regression_obj=regression_obj)
     ncr.fit(x, y)
     t = np.linspace(x_lim[0], x_lim[1], num=250)
     if hasattr(regression_obj, "predict_proba"):
@@ -107,6 +106,17 @@ def make_natural_cubic_regression(n_knots, regression_obj=LinearRegression,
     return Pipeline([
         ('standardizer', StandardScaler()),
         ('nat_cubic', NaturalCubicSpline(knot_range[0], knot_range[1], n_knots=n_knots)),
+        ('regression', regression_obj)
+    ])
+
+def make_pl_regression(n_knots, regression_obj=LinearRegression, 
+                                  knot_range=(-2, 2)):
+    """A helper function for constructing a pipeline fiting a one dimensional
+    regression with a cubic spline feature."""
+    regression_obj = clone(regression_obj)
+    return Pipeline([
+        ('standardizer', StandardScaler()),
+        ('pl_spline', LinearSpline(knot_range[0], knot_range[1], n_knots=n_knots)),
         ('regression', regression_obj)
     ])
 
