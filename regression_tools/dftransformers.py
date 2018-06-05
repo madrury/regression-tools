@@ -454,7 +454,7 @@ class NanReplacer(TransformerMixin):
             self.values = self._find_fill(X)
         else:
             self.values = np.apply_along_axis(
-                lambda x: self._find_fill (x), 0, X)
+                lambda x: self._find_fill(x), 0, X)
         return self
 
     def transform(self, X, *args, **kwargs):
