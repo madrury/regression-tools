@@ -256,8 +256,22 @@ class DummiesEncoder(TransformerMixin):
 
     def _get_levels(self, arr):
         """Returns the most common unique levels in array-like arr"""
-        levels, counts = np.unique(arr, return_counts=True)
-        return levels[np.argsort(counts)[self.less:]]
+        if np.any(pd.isnull(arr)):
+            # nan handling
+            levels, counts = np.unique(arr[~pd.isnull(arr)], return_counts=True)
+            levels, counts = list(levels), list(counts)
+            if "_is_null" in levels:
+                warnings.warn("The string '_is_null' is used to denote nan by "
+                              "DummiesEncoder. Input data containing '_is_null'"
+                              " and nan will not be encoded properly.")
+            levels.append("_is_null")
+            counts.append(len(arr) - sum(counts))
+            levels = [level[0] for level in
+                sorted(list(zip(levels, counts)), key=lambda t: t[1])[self.less:]]
+            return levels
+        else:
+            levels, counts = np.unique(arr, return_counts=True)
+            return list(levels[np.argsort(counts)[self.less:]])
 
     def _make_colnames(self, prefix, levels):
         """Returns list of str column names
@@ -277,13 +291,23 @@ class DummiesEncoder(TransformerMixin):
         curr_col_idx = 0
         for key in self.levels:
             if isinstance(X, pd.DataFrame):
-                curr_vals = np.array(X[key].values).reshape(-1,1)
+                curr_vals = np.array(X[key].values)
             else:
-                curr_vals = X[:,key].reshape(-1,1)
-            # broadcast boolean check to fill array
-            dum_arr[:, curr_col_idx:curr_col_idx + len(self.levels[key])] \
-                += np.array(self.levels[key]) == curr_vals
-            curr_col_idx += len(self.levels[key])
+                curr_vals = X[:,key]
+            if not "_is_null" in self.levels[key]:
+                # broadcast boolean check to fill array
+                curr_vals = curr_vals.reshape(-1,1)
+                dum_arr[:, curr_col_idx:curr_col_idx + len(self.levels[key])] \
+                    += np.array(self.levels[key]) == curr_vals
+                curr_col_idx += len(self.levels[key])
+            else:
+                # nan handling
+                for level in self.levels[key]:
+                    if level == "_is_null":
+                        dum_arr[:, curr_col_idx] += pd.isnull(curr_vals)
+                    else:
+                        dum_arr[:, curr_col_idx] += level == curr_vals
+                    curr_col_idx += 1
         return dum_arr
 
 
