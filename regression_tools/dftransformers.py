@@ -360,7 +360,7 @@ class MissingIndicator(TransformerMixin):
         arr = X.copy()
         if isinstance(X, pd.DataFrame):
             arr = arr.values
-        self.missing_data_cols = np.where(np.isnan(arr).any(axis=0))[0]
+        self.missing_data_cols = np.where(pd.isnull(arr).any(axis=0))[0]
         if isinstance(X, pd.DataFrame):
             self.missing_data_names = X.columns[self.missing_data_cols]
         if len(self.missing_data_cols) == 0:
@@ -375,7 +375,7 @@ class MissingIndicator(TransformerMixin):
                           "No transformations will be made. Returning X.")
             return X
         missing_array = np.zeros(X.shape, dtype=np.int8)
-        missing_array += np.isnan(X)
+        missing_array += pd.isnull(X)
         # subset columns if necessary
         if len(X.shape) == 2:
             missing_array = missing_array[:,self.missing_data_cols]
@@ -507,7 +507,7 @@ class NanReplacer(TransformerMixin):
         np.ndarray of numeric dtype
         """
         arr = arr.copy()
-        idxs = np.where(np.isnan(arr))
+        idxs = np.where(pd.isnull(arr))
         # note: two-line if condition below. indentation is confusing.
         if (isinstance(arr, pd.Series) or
             (isinstance(arr, np.ndarray) and len(arr.shape) == 1)):
