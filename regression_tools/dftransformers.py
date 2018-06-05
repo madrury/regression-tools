@@ -199,7 +199,7 @@ class DummiesEncoder(TransformerMixin):
                 raise TypeError("Expected pd.DataFrame, pd.Series, or np.ndarray")
 
         # get levels if not user-defined
-        if not self.levels:
+        if not self.user_input_levels:
             self.levels = {}
             for index in self.idxs:
                 if isinstance(X, pd.DataFrame):
