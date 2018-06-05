@@ -174,6 +174,10 @@ class DummiesEncoder(TransformerMixin):
     """
     def __init__(self, idxs="all", levels=None, less=None, drop=True):
         self.idxs = idxs
+        if not levels:
+            self.user_input_levels = False
+        else:
+            self.user_input_levels = True
         self.levels = levels
         if less == None:
             self.less = None
