@@ -219,7 +219,7 @@ class DummiesEncoder(TransformerMixin):
             dum_arr = self._make_dum_array(X)
             for key in self.levels:
                 colnames.extend(self._make_colnames(key, self.levels[key]))
-            dum_df = pd.DataFrame(dum_arr, columns=colnames)
+            dum_df = pd.DataFrame(dum_arr, columns=colnames, index=X.index)
             if self.drop:
                 temp_df = X[[col for col in X.columns if col not in self.idxs]]
                 return pd.concat((temp_df, dum_df), axis=1)
