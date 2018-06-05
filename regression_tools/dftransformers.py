@@ -185,7 +185,7 @@ class DummiesEncoder(TransformerMixin):
             self.less = less
         self.drop = drop
 
-    def fit(self, X):
+    def fit(self, X, *args, **kwargs):
         """Fit DummiesEncoder to X"""
         # get all indices if not user-defined
         if self.idxs == "all":
@@ -210,7 +210,7 @@ class DummiesEncoder(TransformerMixin):
                     self.levels[index] = self._get_levels(X[:,index])
         return self
 
-    def transform(self, X):
+    def transform(self, X, *args, **kwargs):
         """Transform X using the dummies encoding"""
 
         # handle pd.DataFrame
@@ -331,7 +331,7 @@ class MissingIndicator(TransformerMixin):
         self.missing_data_cols = None
         self.missing_data_names = None
 
-    def fit(self, X):
+    def fit(self, X, *args, **kwargs):
         """Fit MissingIndicator to X"""
         arr = X.copy()
         if isinstance(X, pd.DataFrame):
@@ -344,7 +344,7 @@ class MissingIndicator(TransformerMixin):
                           "No transformations will be made.")
         return self
 
-    def transform(self, X):
+    def transform(self, X, *args, **kwargs):
         """Transform X with fit MissingIndicator"""
         if len(self.missing_data_cols) == 0:
             warnings.warn("Warning: no missing data was found during fitting. "
@@ -424,7 +424,7 @@ class NanReplacer(TransformerMixin):
         self.fill = fill
         self.values = None
 
-    def fit(self, X):
+    def fit(self, X, *args, **kwargs):
         """Fit NanReplacer to X"""
         if isinstance(X, pd.Series):
             self.values = self._find_fill(X)
@@ -433,7 +433,7 @@ class NanReplacer(TransformerMixin):
                 lambda x: self._find_fill (x), 0, X)
         return self
 
-    def transform(self, X):
+    def transform(self, X, *args, **kwargs):
         """Transform X with fit NanReplacer"""
         num_array = self._replace_nans(X)
         if isinstance(X, np.ndarray):
